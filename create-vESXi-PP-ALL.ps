@@ -1,0 +1,65 @@
+#Connect to ESXi host
+
+Connect-VIServer -User root -Password VMware1! -Server 10.115.40.73
+
+ 
+
+#VM Names
+
+$VMNamesAll = "vESXi-1","vESXi-2","vESXi-3"
+
+ 
+
+Foreach ($vmName in $VMNamesAll)
+
+{
+
+ #Create the VM
+
+ New-VM -Name $vmName  -NumCpu 4 -MemoryMB 16384 -NetworkName "CNA-INFRA" -Datastore NFS-LAB-DATASTORE -DiskGB 128 -DiskStorageFormat Thin -GuestId otherGuest64
+
+ 
+
+ #Change network adapter for VMNIC0 to VMXNET3
+
+ get-vm $vmName | get-networkadapter | set-networkadapter -Type vmxnet3 -Confirm:$false
+
+ 
+
+ #Add Network Adapters
+
+ New-NetworkAdapter -VM $vmName -NetworkName "NSX-VTEP-PG" -StartConnected -Type vmxnet3
+
+ New-NetworkAdapter -VM $vmName -NetworkName "CNA-API" -StartConnected -Type vmxnet3
+
+ New-NetworkAdapter -VM $vmName -NetworkName "NFS-PG" -StartConnected -Type vmxnet3
+
+ New-NetworkAdapter -VM $vmName -NetworkName "CNA-VM" -StartConnected -Type vmxnet3
+
+ 
+
+ #Create CD and mount to ESXi image
+
+ $cd = New-CDDrive -VM $vmName -ISOPath "[NFS-LAB-DATASTORE] ISO\ESX-6-0-update-2\VMware-VMvisor-Installer-6.0.0.update02-3620759.x86_64.iso" -StartConnected
+
+ Set-CDDrive -CD $cd -Confirm:$false
+
+ 
+
+ #Add Second Disk
+
+ New-HardDisk -VM $vmName -CapacityGB 192 -Datastore NFS-LAB-DATASTORE
+
+ 
+
+ #Enable VM HW virtualization
+
+ $vm = Get-VM -Name $vmName
+
+ $spec = New-Object VMware.Vim.VirtualMachineConfigSpec
+
+ $spec.nestedHVEnabled = $true
+
+ $vm.ExtensionData.ReconfigVM($spec)
+
+}
